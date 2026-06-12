@@ -23,6 +23,13 @@ class RegKreditRequest extends FormRequest
             'muddati_oy'          => ['required', 'integer', 'min:1', 'max:36'],
             'foiz_stavka'         => ['nullable', 'numeric', 'min:0', 'max:100'],
 
+            // prepareForValidation() orqali hisoblanadigan maydonlar.
+            // Bular rules() ichida bo'lmasa, validated() ularni qaytarmaydi.
+            'kredit_summa'        => ['required', 'numeric', 'min:0'],
+            'qoldiq_qarz'         => ['required', 'numeric', 'min:0'],
+            'oylik_tolov_miqdori' => ['required', 'numeric', 'min:0'],
+            'tolov_qilingan'      => ['required', 'numeric', 'min:0'],
+
             // Sanalar
             'boshlanish_sana'     => ['required', 'date'],
             'tugash_sana'         => ['required', 'date', 'after:boshlanish_sana'],
