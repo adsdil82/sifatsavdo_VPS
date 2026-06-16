@@ -767,7 +767,6 @@ function filialKochir() {
     })
     .catch(() => { window.location.reload(); });
 }
-</script>
 var ttModal = null;
 var odModal = null;
 

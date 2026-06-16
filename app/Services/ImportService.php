@@ -137,6 +137,14 @@ class ImportService
         // Filiallar map
         $filialMap = Filial::pluck('id', 'id')->toArray();
 
+        // Har bir eski kredit uchun haqiqiy muddat (oy) — temp_grafik dagi
+        // tolov_summa > 0 bo'lgan oylar soni (Access'da muddati_oy maydoni yo'q)
+        $muddatiMap = DB::table('temp_grafik')
+            ->selectRaw('reg_kt_id, SUM(tolov_summa > 0) as oy_soni')
+            ->groupBy('reg_kt_id')
+            ->pluck('oy_soni', 'reg_kt_id')
+            ->toArray();
+
         $now   = now()->toDateTimeString();
         $batch = [];
 
@@ -147,6 +155,9 @@ class ImportService
 
             $jamiSumma  = (float) ($q->summa ?? 0);
             $qoldiqQarz = (float) ($q->qoldiq_suma ?? 0);
+            $tugashSana = $this->sanaTuzat($q->oxir_sana ?? $q->end_sana ?? null);
+            $kreditSumma = $jamiSumma - (float) ($q->oldidan_tulov ?? 0);
+            $muddatiOy   = max(1, (int) ($muddatiMap[$q->id_kredit] ?? 12));
 
             $batch[] = [
                 'eski_id'             => $q->id_kredit,
@@ -156,15 +167,15 @@ class ImportService
                 'xodim_id'            => $defaultXodimId,
                 'jami_summa'          => $jamiSumma,
                 'boshlangich_tolov'   => (float) ($q->oldidan_tulov ?? 0),
-                'kredit_summa'        => (float) ($q->kr_produkt ?? 0),
+                'kredit_summa'        => $kreditSumma,
                 'tolov_qilingan'      => max(0, $jamiSumma - $qoldiqQarz),
                 'qoldiq_qarz'         => $qoldiqQarz,
                 'boshlanish_sana'     => $this->sanaTuzat($q->sha_sana ?? null),
-                'tugash_sana'         => $this->sanaTuzat($q->oxir_sana ?? $q->end_sana ?? null),
-                'oylik_tolov_miqdori' => (float) ($q->masulKT ?? 0),
-                'muddati_oy'          => 12,
+                'tugash_sana'         => $tugashSana,
+                'oylik_tolov_miqdori' => round($kreditSumma / $muddatiOy, 2),
+                'muddati_oy'          => $muddatiOy,
                 'foiz_stavka'         => (float) ($q->foizstav ?? 0),
-                'holat'               => $this->kreditHolatMap($q->sts ?? null),
+                'holat'               => $this->kreditHolatHisobla($qoldiqQarz, $tugashSana, $q->sts ?? null),
                 'created_at'          => $now,
                 'updated_at'          => $now,
             ];
@@ -406,5 +417,24 @@ class ImportService
             'muzlatilgan', 'frozen' => 'muzlatilgan',
             default                => 'faol',
         };
+    }
+
+    /**
+     * Kredit holatini aniqlash: eski 'sts' maydoni odatda bo'sh bo'lgani
+     * uchun holatni qoldiq qarz va tugash sanasi asosida hisoblaymiz.
+     */
+    private function kreditHolatHisobla(float $qoldiqQarz, ?string $tugashSana, ?string $eskiHolat): string
+    {
+        $eskiHolat = mb_strtolower(trim($eskiHolat ?? ''));
+        if (in_array($eskiHolat, ['yopiq', 'closed', '0', 'muzlatilgan', 'frozen'], true)) {
+            return $this->kreditHolatMap($eskiHolat);
+        }
+        if ($qoldiqQarz <= 0) {
+            return 'yopilgan';
+        }
+        if ($tugashSana !== null && $tugashSana < now()->toDateString()) {
+            return 'muddati_otgan';
+        }
+        return 'faol';
     }
 }

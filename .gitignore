@@ -21,3 +21,4 @@
 
 *.log
 *.cache
+/public/storage
